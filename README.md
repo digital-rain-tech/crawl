@@ -81,6 +81,18 @@ Contradictions found:
 └─────────────────────────────────────────────────┘
 ```
 
+## Safety Model
+
+Crawl is designed to connect to enterprise databases safely. See [SAFETY.md](SAFETY.md) for the full safety model. Key guarantees:
+
+- **Read-only, always.** No writes, no DDL, no DML. Read-only transaction mode enforced.
+- **Catalog-only access.** Reads stored procedure source code from system catalogs (`pg_catalog`, `ALL_SOURCE`, `sys.sql_modules`). Never queries user table contents.
+- **Non-production recommended.** Warns on production connection strings. Stored procedure source code is identical in staging — there's no reason to connect to prod.
+- **No hammering.** Single connection, rate-limited, batched queries, configurable timeouts.
+- **Query allowlisting.** Every SQL query is hardcoded and auditable. No dynamic SQL.
+- **Local-first LLM.** Enterprise code never needs to leave your environment. Cloud LLM is opt-in.
+- **Full audit trail.** Every query logged for DBA review.
+
 ## Status
 
 Early development. Star the repo to follow progress.
