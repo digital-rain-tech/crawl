@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crawl-data"
+version = "0.1.0"
+description = "Pre-migration intelligence for enterprise data infrastructure"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+authors = [
+    { name = "Augustin Chan", email = "aug@digitalrain.studio" },
+]
+keywords = [
+    "data-migration",
+    "business-logic",
+    "stored-procedures",
+    "etl",
+    "data-warehouse",
+    "dbt",
+    "migration-intelligence",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+    "Topic :: Software Development :: Code Generators",
+]
+
+dependencies = [
+    "click>=8.0",
+    "sqlglot>=25.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+llm = [
+    "ollama>=0.3",
+    "openai>=1.0",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+crawl = "crawl.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/digital-rain-tech/crawl"
+Documentation = "https://github.com/digital-rain-tech/crawl"
+Repository = "https://github.com/digital-rain-tech/crawl"
+Issues = "https://github.com/digital-rain-tech/crawl/issues"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
