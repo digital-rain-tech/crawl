@@ -59,6 +59,9 @@ Documentation = "https://github.com/digital-rain-tech/crawl"
 Repository = "https://github.com/digital-rain-tech/crawl"
 Issues = "https://github.com/digital-rain-tech/crawl/issues"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/crawl"]
+
 [tool.ruff]
 target-version = "py310"
 line-length = 100
