@@ -13,13 +13,7 @@ Never touches user data tables.
 
 from __future__ import annotations
 
-from crawl.models import (
-    DataObject,
-    Dependency,
-    ObjectType,
-    ScanResult,
-    SourcePlatform,
-)
+from crawl.models import DataObject, ScanResult
 from crawl.parsers import BaseParser
 
 # ---------------------------------------------------------------------------
