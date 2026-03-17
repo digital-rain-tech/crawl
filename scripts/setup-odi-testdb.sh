@@ -21,8 +21,9 @@ CONTAINER_NAME="crawl-odi-testdb"
 ORACLE_PASSWORD="crawl123"
 ODI_SCHEMA="odi_repo"
 ODI_PASSWORD="odi123"
-PDB="FREEPDB1"
-IMAGE="gvenzl/oracle-free:23-slim-faststart"
+PDB="XEPDB1"
+# Oracle 23c Free is too new for older ODI dumps — use XE 21c for compatibility
+IMAGE="gvenzl/oracle-xe:21-slim-faststart"
 DUMP_URL="https://github.com/oracle/big-data-lite/raw/master/movie/moviework/odi/dev_odi_repo.dmp"
 DUMP_DIR="$(cd "$(dirname "$0")/.." && pwd)/tests/fixtures/odi/big-data-lite"
 DUMP_FILE="dev_odi_repo.dmp"
@@ -62,7 +63,7 @@ echo "Pulling ${IMAGE}..."
 docker pull "${IMAGE}"
 
 # --- Start the container ---
-echo "Starting Oracle 23c Free container..."
+echo "Starting Oracle XE 21c container..."
 docker run -d \
     --name "${CONTAINER_NAME}" \
     --shm-size=1g \
@@ -98,24 +99,32 @@ SQL
 
 # --- Import the dump ---
 echo "Importing ODI repository dump (this may take a minute)..."
-# First, peek at the dump to find the original schema name
-ORIG_SCHEMA=$(docker exec -i "${CONTAINER_NAME}" impdp "sys/${ORACLE_PASSWORD}@${PDB} as sysdba" \
-    directory=dmpdir dumpfile="${DUMP_FILE}" \
-    sqlfile=peek.sql 2>&1 | grep -oP 'old schema.*?name "?\K[^"]+' | head -1 || true)
+# Grant read on the dump directory to odi_repo user
+docker exec -i "${CONTAINER_NAME}" sqlplus -s "sys/${ORACLE_PASSWORD}@${PDB} as sysdba" <<SQL
+GRANT READ, WRITE ON DIRECTORY dmpdir TO ${ODI_SCHEMA};
+EXIT;
+SQL
 
-# If we couldn't detect it, try common names
-if [[ -z "${ORIG_SCHEMA}" ]]; then
-    ORIG_SCHEMA="DEV_ODI_REPO"
-fi
-
+# Import using the odi_repo user (avoid 'as sysdba' quoting issues with impdp)
+# remap_schema handles the schema name change from the original dump
+ORIG_SCHEMA="DEV_ODI_REPO"
 echo "Remapping schema: ${ORIG_SCHEMA} -> ${ODI_SCHEMA}"
-docker exec -i "${CONTAINER_NAME}" impdp "sys/${ORACLE_PASSWORD}@${PDB} as sysdba" \
+# Create a writable log directory inside the container
+docker exec -i "${CONTAINER_NAME}" bash -c "mkdir -p /tmp/dplog && chmod 777 /tmp/dplog"
+docker exec -i "${CONTAINER_NAME}" sqlplus -s "sys/${ORACLE_PASSWORD}@${PDB} as sysdba" <<SQL
+CREATE OR REPLACE DIRECTORY logdir AS '/tmp/dplog';
+GRANT READ, WRITE ON DIRECTORY logdir TO ${ODI_SCHEMA};
+EXIT;
+SQL
+
+docker exec -i "${CONTAINER_NAME}" impdp "${ODI_SCHEMA}/${ODI_PASSWORD}@${PDB}" \
     directory=dmpdir \
     dumpfile="${DUMP_FILE}" \
-    logfile=import.log \
+    logfile=logdir:import.log \
     remap_schema="${ORIG_SCHEMA}:${ODI_SCHEMA}" \
+    remap_tablespace=DEV_ODI_USER:USERS \
     table_exists_action=replace \
-    2>&1 | tail -20
+    2>&1 | tail -30
 
 # --- Verify ---
 echo ""
