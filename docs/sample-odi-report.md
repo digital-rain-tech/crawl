@@ -1,18 +1,92 @@
-# Crawl — ODI Scan Report
+# Crawl — Migration Intelligence Report
 
-**Source:** oracle/big-data-lite ODI 12c movie demo repository
-**Objects discovered:** 8 mappings
-**Dependencies:** 11 source→target links
+**Objects discovered:** 8 mappings, 73 expressions, 11 dependencies
 
----
+## Executive Summary
 
-## Mappings
+| Metric | Count |
+|---|---|
+| Migration risks | **13** (4 high severity) |
+| Contradictions | **0** |
+| Orphan datastores | 8 |
+| Average complexity score | 31 |
+
+## Migration Risks
+
+### High Severity
+
+- **E - Load Oracle (OLH)**: Cross-platform data movement: HiveMovie → OracleMovie
+- **D - Calc Ratings (JSON Flatten)**: Cross-platform data movement: HDFSMovie → HiveMovie
+- **F - Calc Sales (Big Data SQL)**: Cross-platform data movement: HiveMovie → OracleMovie
+- **A - Load Movies (Sqoop)**: Cross-platform data movement: HiveMovie → OracleMovie
+
+### Medium Severity
+
+- **A - Load Movies (Sqoop)**: Oracle SYSDATE — replace with target-specific date function
+
+### Low Severity
+
+- **E - Load Oracle (OLH)**: No execution history — may be dead code or untested
+- **B - Merge Movies (Hive)**: No execution history — may be dead code or untested
+- **C - Calc Ratings (Hive - Pig - Spark)**: No execution history — may be dead code or untested
+- **D - Calc Ratings (JSON Flatten)**: No execution history — may be dead code or untested
+- **F - Calc Sales (Big Data SQL)**: No execution history — may be dead code or untested
+- **A - Load Movies (Sqoop)**: No execution history — may be dead code or untested
+- **G - Sessionize Data (Pig)**: No execution history — may be dead code or untested
+- **Populate movieapp_log_odistage**: No execution history — may be dead code or untested
+
+## Migration Complexity Ranking
+
+Higher score = harder to migrate. Based on expression count, number of sources, cross-platform hops, and KM dependencies.
+
+| Score | Mapping | Sources | Targets | Expressions |
+|---|---|---|---|---|
+| **53** | G - Sessionize Data (Pig) | HiveMovie.movieapp_log_odistage, HiveMovie.cust | HiveMovie.session_stats | 18 |
+| **43** | F - Calc Sales (Big Data SQL) | OracleMovie.CUSTOMER, HiveMovie.movieapp_log_odistage | OracleMovie.ODI_COUNTRY_SALES | 10 |
+| **40** | D - Calc Ratings (JSON Flatten) | HDFSMovie.movie_ratings | HiveMovie.movie_rating | 11 |
+| **30** | A - Load Movies (Sqoop) | OracleMovie.MOVIE | HiveMovie.movie_updates | 9 |
+| **25** | C - Calc Ratings (Hive - Pig - Spark) | HiveMovie.movie, HiveMovie.movieapp_log_odistage | HiveMovie.movie_rating | 6 |
+| **24** | B - Merge Movies (Hive) | HiveMovie.movie_updates | HiveMovie.movie | 8 |
+| **20** | E - Load Oracle (OLH) | HiveMovie.movie_rating | OracleMovie.ODI_MOVIE_RATING | 4 |
+| **16** | Populate movieapp_log_odistage | HiveMovie.movieapp_log_avro | HiveMovie.movieapp_log_odistage | 7 |
+
+## Data Lineage
+
+| Source | Target | Via Mapping |
+|---|---|---|
+| OracleMovie.MOVIE | HiveMovie.movie_updates | A - Load Movies (Sqoop) |
+| HiveMovie.movie_updates | HiveMovie.movie | B - Merge Movies (Hive) |
+| HiveMovie.movie | HiveMovie.movie_rating | C - Calc Ratings (Hive - Pig - Spark) |
+| HiveMovie.movieapp_log_odistage | HiveMovie.movie_rating | C - Calc Ratings (Hive - Pig - Spark) |
+| HDFSMovie.movie_ratings | HiveMovie.movie_rating | D - Calc Ratings (JSON Flatten) |
+| HiveMovie.movie_rating | OracleMovie.ODI_MOVIE_RATING | E - Load Oracle (OLH) |
+| OracleMovie.CUSTOMER | OracleMovie.ODI_COUNTRY_SALES | F - Calc Sales (Big Data SQL) |
+| HiveMovie.movieapp_log_odistage | OracleMovie.ODI_COUNTRY_SALES | F - Calc Sales (Big Data SQL) |
+| HiveMovie.movieapp_log_odistage | HiveMovie.session_stats | G - Sessionize Data (Pig) |
+| HiveMovie.cust | HiveMovie.session_stats | G - Sessionize Data (Pig) |
+| HiveMovie.movieapp_log_avro | HiveMovie.movieapp_log_odistage | Populate movieapp_log_odistage |
+
+## Datastore Analysis
+
+### Terminal Targets (final outputs — never read by another mapping)
+
+- **HiveMovie.session_stats**
+- **OracleMovie.ODI_COUNTRY_SALES**
+- **OracleMovie.ODI_MOVIE_RATING**
+
+### External Sources (ingested but not produced by any mapping)
+
+- **HDFSMovie.movie_ratings**
+- **HiveMovie.cust**
+- **HiveMovie.movieapp_log_avro**
+- **OracleMovie.CUSTOMER**
+- **OracleMovie.MOVIE**
+
+## Mapping Details
 
 ### A - Load Movies (Sqoop)
 
-- **Source tables:** OracleMovie.MOVIE
-- **Target tables:** HiveMovie.movie_updates
-- **Expressions:** 9
+**Complexity: 30** | Sources: OracleMovie.MOVIE | Targets: HiveMovie.movie_updates
 
 | Expression |
 |---|
@@ -28,9 +102,7 @@
 
 ### B - Merge Movies (Hive)
 
-- **Source tables:** HiveMovie.movie_updates
-- **Target tables:** HiveMovie.movie
-- **Expressions:** 8
+**Complexity: 24** | Sources: HiveMovie.movie_updates | Targets: HiveMovie.movie
 
 | Expression |
 |---|
@@ -45,9 +117,7 @@
 
 ### C - Calc Ratings (Hive - Pig - Spark)
 
-- **Source tables:** HiveMovie.movie, HiveMovie.movieapp_log_odistage
-- **Target tables:** HiveMovie.movie_rating
-- **Expressions:** 6
+**Complexity: 25** | Sources: HiveMovie.movie, HiveMovie.movieapp_log_odistage | Targets: HiveMovie.movie_rating
 
 | Expression |
 |---|
@@ -60,9 +130,7 @@
 
 ### D - Calc Ratings (JSON Flatten)
 
-- **Source tables:** HDFSMovie.movie_ratings
-- **Target tables:** HiveMovie.movie_rating
-- **Expressions:** 11
+**Complexity: 40** | Sources: HDFSMovie.movie_ratings | Targets: HiveMovie.movie_rating
 
 | Expression |
 |---|
@@ -80,9 +148,7 @@
 
 ### E - Load Oracle (OLH)
 
-- **Source tables:** HiveMovie.movie_rating
-- **Target tables:** OracleMovie.ODI_MOVIE_RATING
-- **Expressions:** 4
+**Complexity: 20** | Sources: HiveMovie.movie_rating | Targets: OracleMovie.ODI_MOVIE_RATING
 
 | Expression |
 |---|
@@ -93,9 +159,7 @@
 
 ### F - Calc Sales (Big Data SQL)
 
-- **Source tables:** OracleMovie.CUSTOMER, HiveMovie.movieapp_log_odistage
-- **Target tables:** OracleMovie.ODI_COUNTRY_SALES
-- **Expressions:** 10
+**Complexity: 43** | Sources: OracleMovie.CUSTOMER, HiveMovie.movieapp_log_odistage | Targets: OracleMovie.ODI_COUNTRY_SALES
 
 | Expression |
 |---|
@@ -112,9 +176,7 @@
 
 ### G - Sessionize Data (Pig)
 
-- **Source tables:** HiveMovie.movieapp_log_odistage, HiveMovie.cust
-- **Target tables:** HiveMovie.session_stats
-- **Expressions:** 18
+**Complexity: 53** | Sources: HiveMovie.movieapp_log_odistage, HiveMovie.cust | Targets: HiveMovie.session_stats
 
 | Expression |
 |---|
@@ -139,9 +201,7 @@
 
 ### Populate movieapp_log_odistage
 
-- **Source tables:** HiveMovie.movieapp_log_avro
-- **Target tables:** HiveMovie.movieapp_log_odistage
-- **Expressions:** 7
+**Complexity: 16** | Sources: HiveMovie.movieapp_log_avro | Targets: HiveMovie.movieapp_log_odistage
 
 | Expression |
 |---|
@@ -152,24 +212,6 @@
 | `movieapp_log_odistage.custid = @{R0}` |
 | `movieapp_log_odistage.movieid = @{R0}` |
 | `movieapp_log_odistage.time = @{R0}` |
-
----
-
-## Data Lineage (Dependencies)
-
-| Source | Target | Via Mapping |
-|---|---|---|
-| OracleMovie.MOVIE | HiveMovie.movie_updates | mapping:A - Load Movies (Sqoop) |
-| HiveMovie.movie_updates | HiveMovie.movie | mapping:B - Merge Movies (Hive) |
-| HiveMovie.movie | HiveMovie.movie_rating | mapping:C - Calc Ratings (Hive - Pig - Spark) |
-| HiveMovie.movieapp_log_odistage | HiveMovie.movie_rating | mapping:C - Calc Ratings (Hive - Pig - Spark) |
-| HDFSMovie.movie_ratings | HiveMovie.movie_rating | mapping:D - Calc Ratings (JSON Flatten) |
-| HiveMovie.movie_rating | OracleMovie.ODI_MOVIE_RATING | mapping:E - Load Oracle (OLH) |
-| OracleMovie.CUSTOMER | OracleMovie.ODI_COUNTRY_SALES | mapping:F - Calc Sales (Big Data SQL) |
-| HiveMovie.movieapp_log_odistage | OracleMovie.ODI_COUNTRY_SALES | mapping:F - Calc Sales (Big Data SQL) |
-| HiveMovie.movieapp_log_odistage | HiveMovie.session_stats | mapping:G - Sessionize Data (Pig) |
-| HiveMovie.cust | HiveMovie.session_stats | mapping:G - Sessionize Data (Pig) |
-| HiveMovie.movieapp_log_avro | HiveMovie.movieapp_log_odistage | mapping:Populate movieapp_log_odistage |
 
 ---
 
