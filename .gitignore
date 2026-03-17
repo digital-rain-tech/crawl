@@ -18,3 +18,4 @@ docs/internal/
 
 memory/
 *.dmp
+crawl_llm_log.db

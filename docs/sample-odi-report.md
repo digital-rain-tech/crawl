@@ -88,6 +88,8 @@ Higher score = harder to migrate. Based on expression count, number of sources, 
 
 **Complexity: 30** | Sources: OracleMovie.MOVIE | Targets: HiveMovie.movie_updates
 
+> 
+
 | Expression |
 |---|
 | `movie_updates.ts = SYSDATE` |
@@ -104,6 +106,8 @@ Higher score = harder to migrate. Based on expression count, number of sources, 
 
 **Complexity: 24** | Sources: HiveMovie.movie_updates | Targets: HiveMovie.movie
 
+> This mapping implements a movie data consolidation process that merges updated movie information from a staging table into the main movie repository. It updates all movie attributes including title, gross revenue, release year, budget, and plot summary while using the maximum timestamp to determine the most recent version of each movie record. The business domain is entertainment/media, specifically movie database management, where this logic ensures the movie catalog stays current with the latest available information.
+
 | Expression |
 |---|
 | `movie.title = @{R0}` |
@@ -119,6 +123,8 @@ Higher score = harder to migrate. Based on expression count, number of sources, 
 
 **Complexity: 25** | Sources: HiveMovie.movie, HiveMovie.movieapp_log_odistage | Targets: HiveMovie.movie_rating
 
+> 
+
 | Expression |
 |---|
 | `movie_rating.year = @{R0}` |
@@ -131,6 +137,8 @@ Higher score = harder to migrate. Based on expression count, number of sources, 
 ### D - Calc Ratings (JSON Flatten)
 
 **Complexity: 40** | Sources: HDFSMovie.movie_ratings | Targets: HiveMovie.movie_rating
+
+> 
 
 | Expression |
 |---|
@@ -150,6 +158,8 @@ Higher score = harder to migrate. Based on expression count, number of sources, 
 
 **Complexity: 20** | Sources: HiveMovie.movie_rating | Targets: OracleMovie.ODI_MOVIE_RATING
 
+> This mapping transfers movie rating data from a Hive data warehouse to an Oracle database, specifically loading average ratings along with movie identifiers, titles, and release years. The business logic appears to be focused on consolidating movie analytics data from a big data processing environment (Hive) into a traditional relational database (Oracle) for operational reporting or integration with other business systems. This suggests a data warehousing or business intelligence use case where movie rating information needs to be available in a more accessible format for downstream applications or reporting tools.
+
 | Expression |
 |---|
 | `MOV_RATING.AVG_RATING = @{R0}` |
@@ -160,6 +170,8 @@ Higher score = harder to migrate. Based on expression count, number of sources, 
 ### F - Calc Sales (Big Data SQL)
 
 **Complexity: 43** | Sources: OracleMovie.CUSTOMER, HiveMovie.movieapp_log_odistage | Targets: OracleMovie.ODI_COUNTRY_SALES
+
+> This mapping calculates sales metrics by country and continent for a movie-related business. It aggregates total sales data from customer and movie application logs, then distributes these aggregated sales figures to both summary (AGGREGATE) and detailed (CTRY_SALES) target tables, maintaining consistent country and continent identifiers across both outputs. The business domain appears to be movie sales analytics, tracking revenue performance across geographic regions.
 
 | Expression |
 |---|
@@ -177,6 +189,8 @@ Higher score = harder to migrate. Based on expression count, number of sources, 
 ### G - Sessionize Data (Pig)
 
 **Complexity: 53** | Sources: HiveMovie.movieapp_log_odistage, HiveMovie.cust | Targets: HiveMovie.session_stats
+
+> This mapping implements session analytics for a movie application, calculating session duration statistics (maximum, average, and minimum) for users grouped by their geographic location (country and state/province). It processes raw movie application log data to transform session timestamps into meaningful metrics, then enriches these metrics with customer demographic information to provide insights into user engagement patterns across different regions.
 
 | Expression |
 |---|
@@ -202,6 +216,8 @@ Higher score = harder to migrate. Based on expression count, number of sources, 
 ### Populate movieapp_log_odistage
 
 **Complexity: 16** | Sources: HiveMovie.movieapp_log_avro | Targets: HiveMovie.movieapp_log_odistage
+
+> 
 
 | Expression |
 |---|

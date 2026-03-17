@@ -6,8 +6,16 @@ from crawl.analysis import AnalysisResult
 from crawl.models import ScanResult
 
 
-def generate_markdown(scan: ScanResult, analysis: AnalysisResult) -> str:
-    """Generate a full Markdown migration intelligence report."""
+def generate_markdown(
+    scan: ScanResult,
+    analysis: AnalysisResult,
+    explanations: dict[str, str] | None = None,
+) -> str:
+    """Generate a full Markdown migration intelligence report.
+
+    Args:
+        explanations: Optional dict mapping mapping_name -> LLM explanation text.
+    """
     lines: list[str] = []
 
     # Header
@@ -137,6 +145,12 @@ def generate_markdown(scan: ScanResult, analysis: AnalysisResult) -> str:
         lines.append(f"**Complexity: {score}** | "
                      f"Sources: {src} | Targets: {tgt}")
         lines.append("")
+
+        # LLM explanation if available
+        if explanations and obj.name in explanations:
+            lines.append(f"> {explanations[obj.name]}")
+            lines.append("")
+
         if obj.expressions:
             lines.append("| Expression |")
             lines.append("|---|")
