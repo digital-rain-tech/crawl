@@ -30,33 +30,13 @@ All parsers produce a **Common IR** (`ScanResult`) containing `DataObject`, `Dep
 
 The **Analysis Engine** combines deterministic AST parsing (via sqlglot) with LLM extraction (via OpenRouter) for business rule interpretation, cross-platform risk detection, complexity scoring, dead code flagging, and vendor syntax identification.
 
-## Example: ODI Movie Pipeline
+## Example
 
-Crawl scanned a real Oracle Data Integrator repository (Oracle Big Data Lite demo) and produced this:
+Crawl scanned a real Oracle Data Integrator repository and mapped the full data lineage — across Oracle, Hive, HDFS, Pig, and Spark — in one command:
 
 ![ETL Pipeline Lineage](docs/diagrams/etl-pipeline-lineage.png)
 
-**What Crawl found that ODI Studio can't show you:**
-
-- 8 mappings across 4 technologies (Oracle, Hive, Pig, Spark)
-- 5 cross-platform data hops — each one a migration risk
-- Vendor-specific syntax (`SYSDATE`, `NVL`, `DECODE`) that needs translation
-- 0 execution history on any mapping — potential dead code
-- 3 terminal targets, 5 external sources — data lineage boundaries
-
-**Business rules extracted in plain English:**
-```
-C - Calc Ratings (Hive → Pig → Spark) (confidence: HIGH)
-├── Rule: Calculates average movie ratings grouped by movie ID
-├── Sources: HiveMovie.movie, HiveMovie.movieapp_log_odistage
-├── Target: HiveMovie.movie_rating
-└── Risk: ⚠️ Cross-platform hop (Hive → Pig → Spark) — vendor-specific aggregation
-
-G - Sessionize Data (Pig) (confidence: HIGH)
-├── Rule: Sessionizes click data, computes max/avg session duration by country
-├── Expressions: ROUND(@{R0} * 1000), MAX(@{R0}), AVG(@{R0})
-└── Risk: ⚠️ Pig Latin expressions need translation for target platform
-```
+It found 5 cross-platform data hops, vendor-specific syntax needing translation, and zero execution history across all 8 mappings. [Full ODI example →](docs/sources/odi.md#example-odi-movie-pipeline)
 
 ## Design Principles
 
@@ -67,9 +47,9 @@ G - Sessionize Data (Pig) (confidence: HIGH)
 
 ## Supported Sources
 
-| Source | Status | Mode |
+| Source | Status | Docs |
 |--------|--------|------|
-| Oracle Data Integrator (ODI) | **Working** | Live DB (`odi://`) and offline XML Smart Export (`odi-export:`) |
+| Oracle Data Integrator (ODI) | **Working** | [Guide](docs/sources/odi.md) |
 | PostgreSQL stored procedures | Planned | |
 | Snowflake (views, UDFs, procs, tasks) | Planned | |
 | Informatica PowerCenter / IICS | Planned | |
@@ -77,23 +57,15 @@ G - Sessionize Data (Pig) (confidence: HIGH)
 | Oracle PL/SQL | Planned | |
 | dbt models | Planned | |
 
-### Dual Ingestion Modes (ODI)
-
-The ODI parser supports two ways in:
-
-- **Live DB mode** (`odi://host:1521/repo`) — connects read-only to the ODI repository database and queries SNP_ catalog tables directly
-- **Offline export mode** (`odi-export:./export.zip`) — parses a Smart Export XML file. No database access needed. Critical for enterprise sales where DB access is restricted
-
 ## Safety Model
 
 Crawl is designed to connect to enterprise databases safely. See [SAFETY.md](SAFETY.md) for the full safety model. Key guarantees:
 
 - **Read-only, always.** No writes, no DDL, no DML. Read-only transaction mode enforced.
-- **Catalog-only access.** Reads metadata from system catalogs (`pg_catalog`, `ALL_SOURCE`, `SNP_` tables). Never queries user table contents.
-- **Query allowlisting.** Every SQL query is hardcoded and auditable. No dynamic SQL, no user-provided queries.
-- **Non-production recommended.** Warns on production connection strings. Requires `--i-know-this-is-prod` to override.
-- **No hammering.** Single connection, rate-limited, batched queries, configurable timeouts.
-- **LLM redaction.** Credentials and connection strings stripped before sending source code to LLM.
+- **Catalog-only access.** Reads metadata from system catalogs. Never queries user table contents.
+- **Query allowlisting.** Every SQL query is hardcoded and auditable. No dynamic SQL.
+- **Non-production recommended.** Warns on production connection strings.
+- **LLM redaction.** Credentials and connection strings stripped before sending to LLM.
 - **Full audit trail.** Every LLM call logged to SQLite with model, tokens, timing, full request/response.
 
 ## Getting Started
