@@ -77,11 +77,11 @@ G - Sessionize Data (Pig) (confidence: HIGH)
 | Oracle PL/SQL | Planned | |
 | dbt models | Planned | |
 
-### Dual Ingestion Modes
+### Dual Ingestion Modes (ODI)
 
-Each source supports two ways in:
+The ODI parser supports two ways in:
 
-- **Live DB mode** (`odi://host:1521/repo`) — connects read-only to the repository database and queries system catalog tables directly
+- **Live DB mode** (`odi://host:1521/repo`) — connects read-only to the ODI repository database and queries SNP_ catalog tables directly
 - **Offline export mode** (`odi-export:./export.zip`) — parses a Smart Export XML file. No database access needed. Critical for enterprise sales where DB access is restricted
 
 ## Safety Model
