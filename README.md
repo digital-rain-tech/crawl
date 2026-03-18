@@ -15,29 +15,50 @@ Crawl is **Step 0**: the pre-migration intelligence layer that runs before you u
 ## What Crawl Does
 
 ```
-crawl scan     Connect to a database and discover all stored procs, views, functions
+crawl scan     Connect to a source and discover all mappings, procs, views, dependencies
 crawl extract  Extract human-readable business rules using hybrid AST + LLM analysis
 crawl triage   Score each object by criticality, complexity, and migration risk
 crawl diff     Compare extracted logic between environments or time periods
 crawl export   Output to dbt-docs YAML, JSON, or Markdown
 ```
 
-### Example
+### Example: ODI Movie Pipeline
 
-**Input:** A 200-line stored procedure that nobody on the team wrote
+Crawl scanned a real Oracle Data Integrator repository (Oracle Big Data Lite demo) and produced this:
 
-**Output:**
+![ETL Pipeline Lineage](docs/diagrams/etl-pipeline-lineage.png)
+
+**What Crawl found that ODI Studio can't show you:**
+
+- 8 mappings across 4 technologies (Oracle, Hive, Pig, Spark)
+- 5 cross-platform data hops — each one a migration risk
+- Vendor-specific syntax (`SYSDATE`, `NVL`, `DECODE`) that needs translation
+- 0 execution history on any mapping — potential dead code
+- 3 terminal targets, 5 external sources — data lineage boundaries
+
+**Business rules extracted in plain English:**
 ```
-sp_calculate_customer_churn (confidence: HIGH)
-├── Rule 1: Customers inactive >90 days flagged as at-risk
-├── Rule 2: Churn score weighted by lifetime value (table: dim_customer)
-├── Rule 3: ⚠️ References dim_product_v2 — TABLE DROPPED 2022-06-14
-├── Rule 4: Monthly aggregation via vendor-specific DATEADD syntax
-└── Triage: CRITICAL (12 downstream dependencies) | MEDIUM migration risk
+C - Calc Ratings (Hive → Pig → Spark) (confidence: HIGH)
+├── Rule: Calculates average movie ratings grouped by movie ID
+├── Sources: HiveMovie.movie, HiveMovie.movieapp_log_odistage
+├── Target: HiveMovie.movie_rating
+└── Risk: ⚠️ Cross-platform hop (Hive → Pig → Spark) — vendor-specific aggregation
 
-Contradictions found:
-  └── Rule 2 conflicts with sp_calculate_ltv line 47 (different LTV formula)
+G - Sessionize Data (Pig) (confidence: HIGH)
+├── Rule: Sessionizes click data, computes max/avg session duration by country
+├── Expressions: ROUND(@{R0} * 1000), MAX(@{R0}), AVG(@{R0})
+└── Risk: ⚠️ Pig Latin expressions need translation for target platform
 ```
+
+## Architecture
+
+![Crawl Architecture](docs/diagrams/crawl-architecture.png)
+
+**Pipeline:** `scan → extract → triage → diff → export`
+
+All parsers produce a **Common IR** (`ScanResult`) containing `DataObject`, `Dependency`, `BusinessRule`, and `Contradiction` records. Everything downstream of `scan` is source-agnostic.
+
+The **Analysis Engine** combines deterministic AST parsing (via sqlglot) with LLM extraction (via OpenRouter) for business rule interpretation, cross-platform risk detection, complexity scoring, dead code flagging, and vendor syntax identification.
 
 ## Design Principles
 
@@ -48,54 +69,56 @@ Contradictions found:
 
 ## Supported Sources
 
-| Source | Status |
-|--------|--------|
-| PostgreSQL stored procedures | Planned |
-| Snowflake (views, UDFs, procs, tasks) | Planned |
-| Informatica PowerCenter / IICS | Planned |
-| SQL Server stored procedures | Planned |
-| Oracle PL/SQL | Planned |
-| dbt models | Planned |
+| Source | Status | Mode |
+|--------|--------|------|
+| Oracle Data Integrator (ODI) | **Working** | Live DB (`odi://`) and offline XML Smart Export (`odi-export:`) |
+| PostgreSQL stored procedures | Planned | |
+| Snowflake (views, UDFs, procs, tasks) | Planned | |
+| Informatica PowerCenter / IICS | Planned | |
+| SQL Server stored procedures | Planned | |
+| Oracle PL/SQL | Planned | |
+| dbt models | Planned | |
 
-## Architecture
+### Dual Ingestion Modes
 
-```
-┌─────────────────────────────────────────────────┐
-│                   crawl CLI                      │
-│        scan | extract | triage | diff | export   │
-├─────────────────────────────────────────────────┤
-│              Orchestration Layer                  │
-├──────────┬──────────┬──────────┬────────────────┤
-│ Postgres │ Snowflake│ SQL Srv  │  Informatica   │
-│ Parser   │ Parser   │ Parser   │  Parser        │
-├──────────┴──────────┴──────────┴────────────────┤
-│       AST (sqlglot) + LLM Extraction Layer       │
-│  Deterministic parsing → Business rule interp.   │
-│  → Confidence scoring → Contradiction detection  │
-├─────────────────────────────────────────────────┤
-│              Triage Engine                        │
-│  Criticality · Dead code · Dependencies · Risk   │
-├─────────────────────────────────────────────────┤
-│           LLM Backend (pluggable)                │
-│  Local: Ollama, vLLM  │  Cloud: OpenAI, Claude  │
-└─────────────────────────────────────────────────┘
-```
+Each source supports two ways in:
+
+- **Live DB mode** (`odi://host:1521/repo`) — connects read-only to the repository database and queries system catalog tables directly
+- **Offline export mode** (`odi-export:./export.zip`) — parses a Smart Export XML file. No database access needed. Critical for enterprise sales where DB access is restricted
 
 ## Safety Model
 
 Crawl is designed to connect to enterprise databases safely. See [SAFETY.md](SAFETY.md) for the full safety model. Key guarantees:
 
 - **Read-only, always.** No writes, no DDL, no DML. Read-only transaction mode enforced.
-- **Catalog-only access.** Reads stored procedure source code from system catalogs (`pg_catalog`, `ALL_SOURCE`, `sys.sql_modules`). Never queries user table contents.
-- **Non-production recommended.** Warns on production connection strings. Stored procedure source code is identical in staging — there's no reason to connect to prod.
+- **Catalog-only access.** Reads metadata from system catalogs (`pg_catalog`, `ALL_SOURCE`, `SNP_` tables). Never queries user table contents.
+- **Query allowlisting.** Every SQL query is hardcoded and auditable. No dynamic SQL, no user-provided queries.
+- **Non-production recommended.** Warns on production connection strings. Requires `--i-know-this-is-prod` to override.
 - **No hammering.** Single connection, rate-limited, batched queries, configurable timeouts.
-- **Query allowlisting.** Every SQL query is hardcoded and auditable. No dynamic SQL.
-- **Local-first LLM.** Enterprise code never needs to leave your environment. Cloud LLM is opt-in.
-- **Full audit trail.** Every query logged for DBA review.
+- **LLM redaction.** Credentials and connection strings stripped before sending source code to LLM.
+- **Full audit trail.** Every LLM call logged to SQLite with model, tokens, timing, full request/response.
+
+## Getting Started
+
+```bash
+# Install
+pip install -e ".[dev,llm]"
+
+# Scan an ODI Smart Export (no database access needed)
+crawl scan --source "odi-export:./my-export.zip"
+
+# Scan a live ODI repository
+crawl scan --source "odi://host:1521/repo"
+
+# Run tests
+pytest
+```
 
 ## Status
 
-Early development. Star the repo to follow progress.
+Pre-alpha. The ODI parser is working end-to-end with both live DB and offline XML modes. LLM business rule extraction, migration risk analysis, and visual lineage diagrams are functional. Additional parsers and CLI commands are in progress.
+
+Star the repo to follow progress.
 
 ## License
 
