@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-18
 **Status:** Accepted
-**Context:** Demo needs visual ETL pipeline diagrams (ADR-002 items "visual lineage diagram" and "markdown-only report")
+**Context:** Demo needs visual ETL pipeline diagrams to make migration complexity immediately tangible for customer presentations
 
 ## Problem
 

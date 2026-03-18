@@ -87,3 +87,25 @@ This is critical — Crawl connects to enterprise databases. All code must enfor
 ## Build System
 
 Uses **Hatchling** (PEP 517). Package name: `crawl-data`, packages in `src/crawl`. Requires Python ≥3.10.
+
+## Documentation: Public vs Internal
+
+This is a **public open-source repo**. Be careful about what goes where.
+
+### Public ADRs (`docs/adr/`)
+Technical architecture decisions only. These are committed and visible on GitHub.
+- Parser design choices, data model decisions, tooling tradeoffs
+- Example: ADR-001 (KM taxonomy), ADR-003 (Excalidraw vs Mermaid)
+
+### Internal docs (`docs/internal/`) — GITIGNORED
+Strategy, competitive analysis, customer context, and anything with names of people we work with (other than Augustin Chan). This directory is in `.gitignore` and never pushed.
+- Market sizing, vendor prioritization, go-to-market strategy
+- Customer names, deal context, demo readiness assessments
+- Competitive analysis (which vendor to target next and why)
+
+### Rule of thumb
+Before creating an ADR, ask: "Would I put this on a slide at a conference?" If yes → `docs/adr/`. If it's more like an internal strategy memo → `docs/internal/`.
+
+### Privacy
+- **Augustin Chan's name** is fine in public docs (founder, About section)
+- **No other personal names** in public-facing content (customers, collaborators, contacts)
