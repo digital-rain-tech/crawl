@@ -12,7 +12,11 @@ Every cloud migration hits the same wall: thousands of stored procedures and ETL
 
 Crawl is **Step 0**: the pre-migration intelligence layer that runs before you use Datafold, Lakebridge, dbt, or SnowConvert.
 
-## What Crawl Does
+## Architecture
+
+![Crawl Architecture](docs/diagrams/crawl-architecture.png)
+
+**Pipeline:** `scan → extract → triage → diff → export`
 
 ```
 crawl scan     Connect to a source and discover all mappings, procs, views, dependencies
@@ -22,7 +26,11 @@ crawl diff     Compare extracted logic between environments or time periods
 crawl export   Output to dbt-docs YAML, JSON, or Markdown
 ```
 
-### Example: ODI Movie Pipeline
+All parsers produce a **Common IR** (`ScanResult`) containing `DataObject`, `Dependency`, `BusinessRule`, and `Contradiction` records. Everything downstream of `scan` is source-agnostic.
+
+The **Analysis Engine** combines deterministic AST parsing (via sqlglot) with LLM extraction (via OpenRouter) for business rule interpretation, cross-platform risk detection, complexity scoring, dead code flagging, and vendor syntax identification.
+
+## Example: ODI Movie Pipeline
 
 Crawl scanned a real Oracle Data Integrator repository (Oracle Big Data Lite demo) and produced this:
 
@@ -49,16 +57,6 @@ G - Sessionize Data (Pig) (confidence: HIGH)
 ├── Expressions: ROUND(@{R0} * 1000), MAX(@{R0}), AVG(@{R0})
 └── Risk: ⚠️ Pig Latin expressions need translation for target platform
 ```
-
-## Architecture
-
-![Crawl Architecture](docs/diagrams/crawl-architecture.png)
-
-**Pipeline:** `scan → extract → triage → diff → export`
-
-All parsers produce a **Common IR** (`ScanResult`) containing `DataObject`, `Dependency`, `BusinessRule`, and `Contradiction` records. Everything downstream of `scan` is source-agnostic.
-
-The **Analysis Engine** combines deterministic AST parsing (via sqlglot) with LLM extraction (via OpenRouter) for business rule interpretation, cross-platform risk detection, complexity scoring, dead code flagging, and vendor syntax identification.
 
 ## Design Principles
 
