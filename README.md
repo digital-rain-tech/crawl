@@ -52,7 +52,7 @@ It found 5 cross-platform data hops, vendor-specific syntax needing translation,
 | Oracle Data Integrator (ODI) | **Working** | [Guide](docs/sources/odi.md) |
 | PostgreSQL stored procedures | Planned | |
 | Snowflake (views, UDFs, procs, tasks) | Planned | |
-| Informatica PowerCenter / IICS | Planned | |
+| Informatica PowerCenter | **Working** (offline XML) | [Guide](docs/sources/powercenter.md) |
 | SQL Server stored procedures | Planned | |
 | Oracle PL/SQL | Planned | |
 | dbt models | Planned | |
@@ -80,13 +80,16 @@ crawl scan --source "odi-export:./my-export.zip"
 # Scan a live ODI repository
 crawl scan --source "odi://host:1521/repo"
 
+# Scan a PowerCenter XML export
+crawl scan --source "pctr-export:./workflow_export.xml"
+
 # Run tests
 pytest
 ```
 
 ## Status
 
-Pre-alpha. The ODI parser is working end-to-end with both live DB and offline XML modes. LLM business rule extraction, migration risk analysis, and visual lineage diagrams are functional. Additional parsers and CLI commands are in progress.
+Pre-alpha. The ODI parser is working end-to-end with both live DB and offline XML modes. The PowerCenter parser handles POWERMART XML exports (workflows, mappings, sessions, data flow). LLM business rule extraction, migration risk analysis, and visual lineage diagrams are functional. Additional parsers and CLI commands are in progress.
 
 Star the repo to follow progress.
 

@@ -57,7 +57,9 @@ def _resolve_export_parser(scheme: str, path: str) -> BaseParser:
 
         return OdiXmlParser(path)
     elif scheme == "pctr-export":
-        raise NotImplementedError("PowerCenter XML parser not yet implemented")
+        from crawl.parsers.powercenter.xml import PctrXmlParser
+
+        return PctrXmlParser(path)
     else:
         raise ValueError(
             f"Unknown export scheme: {scheme!r}. "

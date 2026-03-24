@@ -18,6 +18,7 @@ pip install -e ".[dev,llm]"
 crawl --help
 crawl scan --source "odi://host:1521/repo"       # ODI live DB
 crawl scan --source "odi-export:./export.zip"     # ODI Smart Export XML
+crawl scan --source "pctr-export:./workflow.xml"  # PowerCenter XML export
 crawl scan --source "postgres://host/db"          # PostgreSQL (planned)
 crawl extract
 crawl triage
@@ -44,9 +45,11 @@ src/crawl/
 ├── parsers/
 │   ├── __init__.py     # BaseParser ABC
 │   ├── registry.py     # Source string → parser resolution (odi://, odi-export:, postgres://, etc.)
-│   └── odi/            # Oracle Data Integrator
-│       ├── db.py       # Live DB mode: queries against SNP_ tables (allowlisted SQL)
-│       └── xml.py      # Offline mode: Smart Export ZIP/XML parsing
+│   ├── odi/            # Oracle Data Integrator
+│   │   ├── db.py       # Live DB mode: queries against SNP_ tables (allowlisted SQL)
+│   │   └── xml.py      # Offline mode: Smart Export ZIP/XML parsing
+│   └── powercenter/    # Informatica PowerCenter
+│       └── xml.py      # Offline mode: POWERMART XML export parsing
 ├── extraction/         # Hybrid AST (sqlglot) + LLM business logic extraction
 ├── triage/             # Criticality/complexity/risk scoring engine
 └── export/             # Output formatters (dbt-docs YAML, JSON, Markdown)
@@ -56,7 +59,7 @@ src/crawl/
 
 - **Common IR (models.py):** All parsers produce `ScanResult` containing `DataObject`, `Dependency`, `BusinessRule`, `Contradiction`. Downstream layers (extraction, triage, export) are source-agnostic.
 - **Dual ingestion modes:** Each ETL source can have a live DB parser and an offline export parser. Offline mode ("just give us an export file") is critical for enterprise sales where DB access is restricted.
-- **Registry (parsers/registry.py):** Resolves `--source` strings to the right parser. Scheme determines parser: `odi://` → OdiDbParser, `odi-export:` → OdiXmlParser.
+- **Registry (parsers/registry.py):** Resolves `--source` strings to the right parser. Scheme determines parser: `odi://` → OdiDbParser, `odi-export:` → OdiXmlParser, `pctr-export:` → PctrXmlParser.
 - **Query allowlisting (parsers/odi/db.py):** All SQL queries are hardcoded constants at module top-level. No dynamic SQL. This is a safety invariant — see SAFETY.md.
 
 ### ODI Parser Notes
