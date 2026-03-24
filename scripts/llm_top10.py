@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Force the model before any crawl imports read env
-MODEL = os.environ.get("CRAWL_LLM_MODEL", "anthropic/claude-sonnet-4")
+MODEL = os.environ.get("CRAWL_LLM_MODEL", "qwen/qwen3-vl-235b-a22b-instruct")
 os.environ["CRAWL_LLM_MODEL"] = MODEL
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -65,6 +65,7 @@ def main():
     total_prompt_tokens = 0
     total_completion_tokens = 0
     total_time_ms = 0
+    total_cost = 0.0
 
     for i, m in enumerate(top10, 1):
         print(f"\n[{i}/10] Calling LLM for {m.name}...")
@@ -77,6 +78,8 @@ def main():
                 use_case="explain_mapping",
                 max_tokens=2048,
             )
+            # Extract actual cost from OpenRouter response
+            cost = resp.raw_response.get("usage", {}).get("cost", 0) or 0
             results.append({
                 "rank": i,
                 "name": m.name,
@@ -90,11 +93,13 @@ def main():
                 "completion_tokens": resp.completion_tokens,
                 "total_tokens": resp.total_tokens,
                 "response_time_ms": resp.response_time_ms,
+                "cost": cost,
             })
             total_prompt_tokens += resp.prompt_tokens
             total_completion_tokens += resp.completion_tokens
             total_time_ms += resp.response_time_ms
-            print(f"    Done ({resp.prompt_tokens}+{resp.completion_tokens} tokens, {resp.response_time_ms}ms)")
+            total_cost += cost
+            print(f"    Done ({resp.prompt_tokens}+{resp.completion_tokens} tokens, ${cost:.4f}, {resp.response_time_ms}ms)")
         except Exception as e:
             print(f"    ERROR: {e}")
             results.append({
@@ -110,17 +115,14 @@ def main():
                 "completion_tokens": 0,
                 "total_tokens": 0,
                 "response_time_ms": 0,
+                "cost": 0,
             })
 
         # Brief pause between calls to avoid rate limiting
         if i < 10:
             time.sleep(1)
 
-    # Cost estimate for Claude Sonnet 4 via OpenRouter
-    # Input: $3/M tokens, Output: $15/M tokens (OpenRouter pricing)
-    input_cost = total_prompt_tokens * 3.0 / 1_000_000
-    output_cost = total_completion_tokens * 15.0 / 1_000_000
-    total_cost = input_cost + output_cost
+    # total_cost is accumulated from OpenRouter's usage.cost in each response
 
     # Generate markdown
     md_lines = [
@@ -151,7 +153,7 @@ def main():
             "",
             r["explanation"],
             "",
-            f"*Tokens: {r['prompt_tokens']} prompt + {r['completion_tokens']} completion = {r['total_tokens']} total | {r['response_time_ms']}ms*",
+            f"*Tokens: {r['prompt_tokens']} prompt + {r['completion_tokens']} completion = {r['total_tokens']} total | ${r['cost']:.4f} | {r['response_time_ms']}ms*",
             "",
             "---",
             "",
@@ -167,11 +169,10 @@ def main():
         f"| Total completion tokens | {total_completion_tokens:,} |",
         f"| Total tokens | {total_prompt_tokens + total_completion_tokens:,} |",
         f"| Total response time | {total_time_ms / 1000:.1f}s |",
-        f"| Estimated input cost | ${input_cost:.4f} |",
-        f"| Estimated output cost | ${output_cost:.4f} |",
-        f"| **Estimated total cost** | **${total_cost:.4f}** |",
+        f"| **Total cost (actual)** | **${total_cost:.4f}** |",
         "",
-        "*Cost estimate based on OpenRouter pricing for Claude Sonnet 4: $3/M input, $15/M output tokens.*",
+        "*Cost is the actual amount reported by OpenRouter (`usage.cost` in API response), not an estimate.*",
+        f"*All requests logged to `crawl_llm_log.db` with full request/response for audit.*",
     ])
 
     md_content = "\n".join(md_lines) + "\n"
@@ -181,7 +182,7 @@ def main():
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(md_content)
     print(f"\nSaved to {output_path}")
-    print(f"\nTotal: {total_prompt_tokens + total_completion_tokens:,} tokens, ${total_cost:.4f} estimated cost")
+    print(f"\nTotal: {total_prompt_tokens + total_completion_tokens:,} tokens, ${total_cost:.4f} actual cost")
 
 
 if __name__ == "__main__":

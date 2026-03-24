@@ -75,7 +75,7 @@ When analyzing a new customer's ETL exports, follow this pipeline:
 
 1. **Scan** — Parse exports with the appropriate parser (`pctr-export:`, `odi-export:`, etc.)
 2. **Analyze** — Generate findings: object counts, complexity distribution, dependency graph, business rule inventory
-3. **LLM Extraction** — Run `explain_mapping()` from `src/crawl/llm.py` on the top complexity hotspots (start with top 10, expand if needed). Uses OpenRouter (`OPENROUTER_API_KEY`). Default model is configurable via `CRAWL_LLM_MODEL` env var — use `anthropic/claude-sonnet-4` for customer-facing reports.
+3. **LLM Extraction** — Run `explain_mapping()` from `src/crawl/llm.py` on the top complexity hotspots (start with top 10, expand if needed). Uses OpenRouter (`OPENROUTER_API_KEY`). Default model is configurable via `CRAWL_LLM_MODEL` env var — use `qwen/qwen3-vl-235b-a22b-instruct` for customer-facing reports.
 4. **Visualize** — Generate Excalidraw diagrams (`.excalidraw` JSON) programmatically using helpers from `docs/diagrams/generate_diagrams.py` (`make_rect`, `make_text`, `make_arrow`, `labeled_rect`, `arrow_between`). Export to PNG/SVG with `docs/diagrams/export_images.py` (requires `npm install -g excalidraw-brute-export-cli`).
 5. **Report** — Assemble into a Migration Intelligence Report in `docs/internal/<source>/`
 
