@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Crawl is a pre-migration intelligence tool for enterprise data infrastructure. It extracts business logic from stored procedures, ETL jobs, and warehouse views before migration. It is **Step 0** — runs before tools like Datafold, Lakebridge, dbt, or SnowConvert.
 
-Early-stage project (Pre-Alpha). First target: Oracle Data Integrator (ODI) parser.
+Early-stage project (Pre-Alpha). Working parsers: Oracle Data Integrator (ODI), Informatica PowerCenter.
 
 ## Commands
 
@@ -68,6 +68,28 @@ ODI stores metadata in SNP_ tables (from "Sunopsis", original company). Two sche
 - **12c:** `SNP_MAPPING` → `SNP_MAP_COMP` → `SNP_MAP_CP` → `SNP_MAP_CONN` (component graph)
 - **11g:** `SNP_POP` → `SNP_POP_COL` → `SNP_POP_MAPPING` (interface definitions)
 Parser auto-detects which are present. Reference: Oracle Support Doc ID 1903225.1.
+
+## Migration Intelligence Report Workflow
+
+When analyzing a new customer's ETL exports, follow this pipeline:
+
+1. **Scan** — Parse exports with the appropriate parser (`pctr-export:`, `odi-export:`, etc.)
+2. **Analyze** — Generate findings: object counts, complexity distribution, dependency graph, business rule inventory
+3. **LLM Extraction** — Run `explain_mapping()` from `src/crawl/llm.py` on the top complexity hotspots (start with top 10, expand if needed). Uses OpenRouter (`OPENROUTER_API_KEY`). Default model is configurable via `CRAWL_LLM_MODEL` env var — use `anthropic/claude-sonnet-4` for customer-facing reports.
+4. **Visualize** — Generate Excalidraw diagrams (`.excalidraw` JSON) programmatically using helpers from `docs/diagrams/generate_diagrams.py` (`make_rect`, `make_text`, `make_arrow`, `labeled_rect`, `arrow_between`). Export to PNG/SVG with `docs/diagrams/export_images.py` (requires `npm install -g excalidraw-brute-export-cli`).
+5. **Report** — Assemble into a Migration Intelligence Report in `docs/internal/<source>/`
+
+### File placement
+- **Customer exports** → `confidential/` (gitignored)
+- **Reports, diagrams, LLM explanations** → `docs/internal/<source>/` (gitignored)
+- **Sanitized test fixtures** → `tests/fixtures/<source>/` (committed, no customer data)
+- **Public source guides** → `docs/sources/<source>.md` (committed)
+
+### Excalidraw diagram conventions
+- Generate `.excalidraw` JSON programmatically (not manually) — write a `generate_*.py` script
+- Color coding: sources (amber), dimensions (blue), facts (green), aggregates (purple), validation (gray), risk (red)
+- Flag complexity hotspots with red callout boxes
+- Show data flow direction (typically top-to-bottom or left-to-right)
 
 ## Safety Model (SAFETY.md)
 
