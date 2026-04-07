@@ -87,6 +87,10 @@ G - Sessionize Data (Pig) (confidence: HIGH)
 
 See [sample-odi-report.md](../sample-odi-report.md) for the full migration intelligence report generated from this scan.
 
+## LLM Extraction
+
+See [LLM Extraction](../llm-extraction.md) for detailed documentation on how to use the LLM for business rule extraction. This feature works the same way for ODI as for any other ETL platform.
+
 ## ODI-Specific Notes
 
 - **Knowledge Module taxonomy** is documented in [ADR-001](../adr/001-odi-knowledge-module-taxonomy.md)

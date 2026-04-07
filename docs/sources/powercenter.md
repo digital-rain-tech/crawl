@@ -82,3 +82,7 @@ crawl scan --source "pctr-export:./exports/"
 ```
 
 The parser accepts individual workflow XML files or a directory containing multiple exports. Each file is parsed independently and results are merged into a single `ScanResult`.
+
+## LLM Extraction
+
+See [LLM Extraction](../llm-extraction.md) for detailed documentation on how to use the LLM for business rule extraction.
