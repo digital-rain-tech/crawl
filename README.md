@@ -99,6 +99,6 @@ Apache 2.0 — see [LICENSE](LICENSE).
 
 ## About
 
-Built by [Digital Rain Technologies](https://digitalrain.studio). Founded by [Augustin Chan](https://augustinchan.dev), former Development Architect at Informatica (12 years, Fortune 500 data integration across APAC/MENA/Europe).
+Built by [Digital Rain Technologies](https://digitalrain.dev). Founded by [Augustin Chan](https://augustinchan.dev), former Development Architect at Informatica (12 years, Fortune 500 data integration across APAC/MENA/Europe).
 
 Part of the Digital Rain enterprise AI readiness platform, alongside [ARA-Eval](https://github.com/digital-rain-tech/ara-eval) (Agentic Readiness Assessment for regulated industries).
