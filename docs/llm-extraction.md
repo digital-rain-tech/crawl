@@ -25,7 +25,8 @@ Run the extraction script on the top N most complex mappings:
 
 ```bash
 python scripts/llm_top10.py --help
-python scripts/llm_top10.py  # Default: top 10 by complexity score
+python scripts/llm_top10.py  # Default: top 10 by expression count, from confidential/
+python scripts/llm_top10.py ../client-repo/confidential --output ../client-repo/docs/internal/powercenter/llm-explanations-top10.md
 ```
 
 The script:

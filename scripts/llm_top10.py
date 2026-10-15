@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
-"""Run LLM extraction on the top 10 most complex PowerCenter mappings."""
+"""Run LLM extraction on the most complex PowerCenter mappings.
 
+Usage:
+    python scripts/llm_top10.py [EXPORT_PATH] [--output FILE] [--limit N]
+
+EXPORT_PATH is a PowerCenter XML file or a directory of them (default: confidential/).
+"""
+
+import argparse
 import os
 import sys
 import time
@@ -42,10 +49,19 @@ def build_prompt(mapping_name, source_tables, target_tables, expressions):
 
 
 def main():
-    print(f"Model: {MODEL}")
-    print(f"Parsing confidential exports...")
+    ap = argparse.ArgumentParser(description="Explain the most complex PowerCenter mappings.")
+    ap.add_argument("export_path", nargs="?", default=str(REPO_ROOT / "confidential"),
+                    help="PowerCenter XML file or directory (default: confidential/)")
+    ap.add_argument("--output", default=str(
+        REPO_ROOT / "docs" / "internal" / "powercenter" / "llm-explanations-top10.md"),
+        help="Markdown file to write (default: docs/internal/powercenter/...)")
+    ap.add_argument("--limit", type=int, default=10, help="Number of mappings to explain")
+    args = ap.parse_args()
 
-    parser = PctrXmlParser(str(REPO_ROOT / "confidential"))
+    print(f"Model: {MODEL}")
+    print(f"Parsing {args.export_path}...")
+
+    parser = PctrXmlParser(args.export_path)
     result = parser.scan()
 
     # Filter to mappings only
@@ -56,8 +72,8 @@ def main():
     # Sort by expression count descending
     mappings.sort(key=lambda m: len(m.expressions), reverse=True)
 
-    top10 = mappings[:10]
-    print(f"\nTop 10 by expression count:")
+    top10 = mappings[:args.limit]
+    print(f"\nTop {len(top10)} by expression count:")
     for i, m in enumerate(top10, 1):
         print(f"  {i}. {m.name} ({len(m.expressions)} exprs, {len(m.source_tables)} src, {len(m.target_tables)} tgt)")
 
@@ -68,7 +84,7 @@ def main():
     total_cost = 0.0
 
     for i, m in enumerate(top10, 1):
-        print(f"\n[{i}/10] Calling LLM for {m.name}...")
+        print(f"\n[{i}/{len(top10)}] Calling LLM for {m.name}...")
         system_prompt, prompt = build_prompt(m.name, m.source_tables, m.target_tables, m.expressions)
 
         try:
@@ -119,14 +135,14 @@ def main():
             })
 
         # Brief pause between calls to avoid rate limiting
-        if i < 10:
+        if i < len(top10):
             time.sleep(1)
 
     # total_cost is accumulated from OpenRouter's usage.cost in each response
 
     # Generate markdown
     md_lines = [
-        "# LLM Explanations: Top 10 Most Complex PowerCenter Mappings",
+        f"# LLM Explanations: Top {len(top10)} Most Complex PowerCenter Mappings",
         "",
         f"> Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
         f"> Model: `{MODEL}`",
@@ -177,8 +193,7 @@ def main():
 
     md_content = "\n".join(md_lines) + "\n"
 
-    # Save to docs/internal/powercenter/
-    output_path = REPO_ROOT / "docs" / "internal" / "powercenter" / "llm-explanations-top10.md"
+    output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(md_content)
     print(f"\nSaved to {output_path}")

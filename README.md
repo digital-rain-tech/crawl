@@ -83,6 +83,9 @@ crawl scan --source "odi://host:1521/repo"
 # Scan a PowerCenter XML export
 crawl scan --source "pctr-export:./workflow_export.xml"
 
+# Try the fictional retail demo (see examples/powercenter/)
+crawl scan --source "pctr-export:examples/powercenter/retail_nightly.xml"
+
 # Run tests
 pytest
 ```
