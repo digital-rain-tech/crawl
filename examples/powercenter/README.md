@@ -11,7 +11,7 @@ One folder (`RETAIL_EDW`) and one nightly workflow that loads a three-layer ware
 | Layer | Mappings | What they do |
 |---|---|---|
 | ODS | 4 | Load point-of-sale lines, stores, items and a returns flat file. Convert currency to USD. |
-| DW | 4 | Type 2 store and product dimensions. Sales and returns facts. |
+| DW | 5 | Type 2 store and product dimensions. Sales and returns facts. A history reload for sales, run by hand. |
 | DM | 3 | Daily store revenue, weekly product margin, loyalty segments. |
 | Legacy | 1 | `m_LEGACY_PROMO_EXTRACT`. No session runs it. |
 
@@ -25,7 +25,23 @@ The business rules in it are the kind that nobody wrote down:
 - **Loyalty tiers:** fixed spend and visit thresholds in a Router (`m_DM_LOAD_MEMBER_SEGMENT`).
 - **Two margin definitions:** `FACT_SALES.MARGIN_AMT` uses net amount. `AGG_PRODUCT_MARGIN`
   uses gross amount. The two numbers do not agree.
+- **A reload that drifted:** `m_DW_RELOAD_FACT_SALES_HIST` writes the same `FACT_SALES` table
+  as the nightly load, but uses ISO weeks for `FISCAL_WEEK` and leaves out the loyalty discount
+  in `NET_AMT`. Back-filled history does not match daily data.
 - **Oracle-only SQL:** `SYSDATE`, `NVL`, `DECODE`, `ROWNUM`, `(+)` outer joins, `DBMS_STATS`.
+
+## What Crawl reports
+
+| Finding | Result |
+|---|---|
+| Objects | 13 mappings, 12 sessions, 1 workflow |
+| Contradictions | 2: `FACT_SALES.NET_AMT` and `FACT_SALES.FISCAL_WEEK` (nightly load vs. history reload) |
+| Oracle-specific SQL | 27 flags across 11 mappings |
+| Most complex mapping | `m_DW_LOAD_FACT_SALES` |
+| Unscheduled mapping | `m_LEGACY_PROMO_EXTRACT` has no session (visible in the scan table, not yet flagged by the report) |
+
+Crawl does not find the two margin definitions. They write to different columns, and the
+contradiction check compares one column at a time. The LLM explanations describe both.
 
 ## Run it
 

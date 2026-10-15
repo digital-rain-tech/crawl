@@ -13,7 +13,12 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from crawl.models import ScanResult
+from crawl.models import ObjectType, ScanResult
+
+# Orchestration objects (sessions, workflows, packages) run logic but hold none of their own.
+_ORCHESTRATION_TYPES = {
+    ObjectType.SESSION, ObjectType.WORKFLOW, ObjectType.PACKAGE, ObjectType.LOAD_PLAN
+}
 
 
 @dataclass
@@ -55,6 +60,7 @@ class AnalysisResult:
     risks: list[MigrationRisk] = field(default_factory=list)
     orphans: list[OrphanDatastore] = field(default_factory=list)
     complexity_scores: dict[str, int] = field(default_factory=dict)
+    objects_by_type: dict[str, int] = field(default_factory=dict)
     summary: dict[str, int] = field(default_factory=dict)
 
 
@@ -76,6 +82,10 @@ _VENDOR_PATTERNS = [
     (r"\bOLH\b", "Oracle Loader for Hadoop — platform-specific, needs alternative"),
     (r"Big Data SQL", "Big Data SQL — Oracle-specific cross-engine query, needs rewrite"),
 ]
+
+
+# A literal or a parameter: a tag such as an error code, not computed logic
+_CONSTANT = re.compile(r"^\s*(-?\d+(\.\d+)?|'[^']*'|\$\$\w+|NULL)\s*$", re.IGNORECASE)
 
 
 def analyze(scan_result: ScanResult) -> AnalysisResult:
@@ -112,18 +122,24 @@ def _detect_contradictions(scan: ScanResult, out: AnalysisResult) -> None:
                     target_writes[key].append((obj.name, logic.strip()))
                     break
 
+        # Parsers that trace columns (PowerCenter) give the target writes directly
+        for key, logic in obj.target_writes.items():
+            target_writes[key.upper()].append((obj.name, logic.strip()))
+
     # Find contradictions — same target column, different logic
     for key, writes in target_writes.items():
         if len(writes) < 2:
             continue
         # Compare each pair
-        seen_logic: dict[str, str] = {}  # normalized_logic → first mapping
+        seen_logic: dict[str, tuple[str, str]] = {}  # normalized → (first mapping, logic)
         for mapping_name, logic in writes:
             normalized = re.sub(r"\s+", " ", logic.upper().strip())
             if normalized in seen_logic:
                 continue  # Same logic, no contradiction
-            for prev_logic, prev_mapping in seen_logic.items():
-                if prev_logic != normalized:
+            for prev_mapping, prev_logic in seen_logic.values():
+                # Different constants per mapping (error codes, status tags) are by design
+                both_constant = _CONSTANT.match(prev_logic) and _CONSTANT.match(logic)
+                if prev_mapping != mapping_name and not both_constant:
                     parts = key.split(".", 1)
                     target_table = parts[0] if len(parts) > 0 else key
                     target_column = parts[1] if len(parts) > 1 else ""
@@ -131,16 +147,21 @@ def _detect_contradictions(scan: ScanResult, out: AnalysisResult) -> None:
                         target_table=target_table,
                         target_column=target_column,
                         mapping_a=prev_mapping,
-                        expression_a=prev_logic.lower(),
+                        expression_a=prev_logic,
                         mapping_b=mapping_name,
                         expression_b=logic,
                         severity="warning",
                     ))
-            seen_logic[normalized] = mapping_name
+            seen_logic[normalized] = (mapping_name, logic)
 
 
 def _detect_migration_risks(scan: ScanResult, out: AnalysisResult) -> None:
     """Flag vendor-specific syntax and cross-platform concerns."""
+    # Offline exports carry no run statistics. Only call an object unexecuted when the
+    # source reports execution data for at least one object.
+    has_run_stats = any(
+        o.execution_count is not None or o.last_executed is not None for o in scan.objects
+    )
     for obj in scan.objects:
         all_text = " ".join(obj.expressions)
         if obj.source_code:
@@ -169,14 +190,13 @@ def _detect_migration_risks(scan: ScanResult, out: AnalysisResult) -> None:
             ))
 
         # No execution history
-        if obj.execution_count is None or obj.execution_count == 0:
-            if obj.last_executed is None:
-                out.risks.append(MigrationRisk(
-                    mapping_name=obj.name,
-                    risk_type="no_execution_history",
-                    description="No execution history — may be dead code or untested",
-                    severity="low",
-                ))
+        if has_run_stats and not obj.execution_count and obj.last_executed is None:
+            out.risks.append(MigrationRisk(
+                mapping_name=obj.name,
+                risk_type="no_execution_history",
+                description="No execution history — may be dead code or untested",
+                severity="low",
+            ))
 
 
 def _detect_orphans(scan: ScanResult, out: AnalysisResult) -> None:
@@ -210,6 +230,8 @@ def _detect_orphans(scan: ScanResult, out: AnalysisResult) -> None:
 def _score_complexity(scan: ScanResult, out: AnalysisResult) -> None:
     """Score each mapping's migration complexity."""
     for obj in scan.objects:
+        if obj.object_type in _ORCHESTRATION_TYPES:
+            continue
         score = 0
         # Base: number of expressions
         score += len(obj.expressions) * 2
@@ -233,8 +255,13 @@ def _score_complexity(scan: ScanResult, out: AnalysisResult) -> None:
 
 def _build_summary(scan: ScanResult, out: AnalysisResult) -> None:
     """Build summary statistics."""
+    by_type: dict[str, int] = defaultdict(int)
+    for obj in scan.objects:
+        by_type[obj.object_type.value] += 1
+    out.objects_by_type = dict(by_type)
     out.summary = {
-        "total_mappings": len(scan.objects),
+        "total_objects": len(scan.objects),
+        "total_mappings": sum(1 for o in scan.objects if o.object_type not in _ORCHESTRATION_TYPES),
         "total_dependencies": len(scan.dependencies),
         "total_expressions": sum(len(o.expressions) for o in scan.objects),
         "contradictions_found": len(out.contradictions),

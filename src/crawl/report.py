@@ -21,8 +21,12 @@ def generate_markdown(
     # Header
     lines.append("# Crawl — Migration Intelligence Report")
     lines.append("")
-    lines.append(f"**Objects discovered:** {analysis.summary['total_mappings']} mappings, "
-                 f"{analysis.summary['total_expressions']} expressions, "
+    counts = ", ".join(
+        f"{n} {t.replace('_', ' ')}{'' if n == 1 else 's'}"
+        for t, n in sorted(analysis.objects_by_type.items(), key=lambda x: -x[1])
+    )
+    lines.append(f"**Objects discovered:** {counts} · "
+                 f"{analysis.summary['total_expressions']} expressions · "
                  f"{analysis.summary['total_dependencies']} dependencies")
     lines.append("")
 
@@ -137,6 +141,8 @@ def generate_markdown(
     lines.append("## Mapping Details")
     lines.append("")
     for obj in sorted(scan.objects, key=lambda o: o.name):
+        if obj.name not in analysis.complexity_scores:
+            continue  # orchestration objects have no logic of their own
         src = ", ".join(obj.source_tables) if obj.source_tables else "(none)"
         tgt = ", ".join(obj.target_tables) if obj.target_tables else "(none)"
         score = analysis.complexity_scores.get(obj.name, 0)

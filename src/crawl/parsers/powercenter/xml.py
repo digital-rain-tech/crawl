@@ -217,14 +217,18 @@ class PctrXmlParser(BaseParser):
             source_tables=sorted(set(sources)),
             target_tables=sorted(set(targets)),
             expressions=expressions,
+            target_writes=self._trace_target_writes(mapping),
         )
         result.objects.append(data_obj)
 
-        # Add data flow dependencies from CONNECTORs
+        # Add data flow dependencies from CONNECTORs. Connectors are per port, so keep one
+        # dependency per pair of instances.
+        seen: set[tuple[str, str]] = set()
         for conn in mapping.findall("CONNECTOR"):
             from_inst = _attr(conn, "FROMINSTANCE")
             to_inst = _attr(conn, "TOINSTANCE")
-            if from_inst and to_inst:
+            if from_inst and to_inst and (from_inst, to_inst) not in seen:
+                seen.add((from_inst, to_inst))
                 result.dependencies.append(
                     Dependency(
                         source=f"{name}/{from_inst}",
@@ -232,6 +236,51 @@ class PctrXmlParser(BaseParser):
                         dependency_type="data_flow",
                     )
                 )
+
+    def _trace_target_writes(self, mapping: ET.Element) -> dict[str, str]:
+        """Map each target column to the expression that computes it.
+
+        Follows port-level CONNECTORs back from the target through pass-through ports until
+        it reaches a port with an expression. Columns that are straight copies are left out.
+        """
+        inst_to_tx: dict[str, str] = {}
+        target_insts: dict[str, str] = {}
+        for inst in mapping.findall("INSTANCE"):
+            inst_name = _attr(inst, "NAME")
+            tname = _attr(inst, "TRANSFORMATION_NAME") or inst_name
+            inst_to_tx[inst_name] = tname
+            if _attr(inst, "TYPE") == "TARGET":
+                target_insts[inst_name] = tname
+
+        port_expr: dict[tuple[str, str], str] = {}
+        for tx in mapping.findall("TRANSFORMATION"):
+            tx_name = _attr(tx, "NAME")
+            for tf in tx.findall("TRANSFORMFIELD"):
+                expr = _attr(tf, "EXPRESSION")
+                field_name = _attr(tf, "NAME")
+                if expr and expr != field_name:
+                    port_expr[(tx_name, field_name)] = expr
+
+        incoming: dict[tuple[str, str], tuple[str, str]] = {}
+        to_targets: list[tuple[str, str, str, str]] = []
+        for conn in mapping.findall("CONNECTOR"):
+            frm = (_attr(conn, "FROMINSTANCE"), _attr(conn, "FROMFIELD"))
+            to = (_attr(conn, "TOINSTANCE"), _attr(conn, "TOFIELD"))
+            incoming[to] = frm
+            if to[0] in target_insts:
+                to_targets.append((target_insts[to[0]], to[1], *frm))
+
+        writes: dict[str, str] = {}
+        for table, column, inst, port in to_targets:
+            for _ in range(50):  # guard against connector cycles
+                expr = port_expr.get((inst_to_tx.get(inst, inst), port))
+                if expr:
+                    writes[f"{table}.{column}"] = expr
+                    break
+                if (inst, port) not in incoming:
+                    break
+                inst, port = incoming[(inst, port)]
+        return writes
 
     # ------------------------------------------------------------------
     # Session extraction

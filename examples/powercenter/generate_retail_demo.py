@@ -331,6 +331,35 @@ MAPPINGS = [
         ],
     },
     {
+        # Backfill job, run by hand from its own session. Its rules drifted from the nightly
+        # load: ISO weeks in place of the fiscal calendar, and no loyalty discount.
+        "name": "m_DW_RELOAD_FACT_SALES_HIST",
+        "sources": ["ODS_SALES_LINE", "ODS_ITEM"], "targets": ["FACT_SALES"],
+        "chain": [
+            tx("SQ_ODS_SALES_LINE", "Source Qualifier", attrs=[
+                ("User Defined Join", "ODS_SALES_LINE.SKU = ODS_ITEM.SKU (+)"),
+                ("Source Filter", ("ODS_SALES_LINE.TXN_DATE BETWEEN TO_DATE('$$FROM_DATE', "
+                                   "'YYYY-MM-DD') AND TO_DATE('$$TO_DATE', 'YYYY-MM-DD')")),
+            ]),
+            tx("LKP_DIM_STORE", "Lookup Procedure", attrs=[
+                ("Lookup condition", "STORE_CODE = IN_STORE_CODE AND CURRENT_FLAG = 'Y'"),
+            ]),
+            tx("LKP_DIM_PRODUCT", "Lookup Procedure", attrs=[
+                ("Lookup condition", "SKU = IN_SKU AND CURRENT_FLAG = 'Y'"),
+            ]),
+            tx("EXP_HIST_AMOUNTS", "Expression", fields=[
+                ("DATE_KEY", "TO_INTEGER(TO_CHAR(TXN_DATE, 'YYYYMMDD'))"),
+                ("FISCAL_WEEK", "TO_INTEGER(TO_CHAR(TXN_DATE, 'IW'))"),
+                ("GROSS_AMT", "GROSS_AMT_USD"),
+                ("NET_AMT", "GROSS_AMT_USD - DISC_AMT_USD"),
+                ("COST_AMT", "QTY * NVL(UNIT_COST, 0)"),
+                ("MARGIN_AMT", "NET_AMT - COST_AMT"),
+                ("STORE_KEY", "IIF(ISNULL(LKP_STORE_KEY), -1, LKP_STORE_KEY)"),
+                ("PRODUCT_KEY", "IIF(ISNULL(LKP_PRODUCT_KEY), -1, LKP_PRODUCT_KEY)"),
+            ]),
+        ],
+    },
+    {
         # Legacy job: no session runs it. Crawl should list it so someone can retire it.
         "name": "m_LEGACY_PROMO_EXTRACT",
         "sources": ["PROMO_CALENDAR", "FACT_SALES"], "targets": ["PROMO_EXTRACT_OUT"],
@@ -401,20 +430,57 @@ def _target(parent, name, cols):
                       KEYTYPE="PRIMARY KEY" if i == 1 else "NOT A KEY", NULLABLE="NULL")
 
 
+def _columns(table):
+    if table in SOURCES:
+        return [c for c, _ in SOURCES[table][1]]
+    return TARGETS[table]
+
+
+def _wire_ports(spec):
+    """Work out each transformation's ports and the port-level connectors.
+
+    Source columns enter the source qualifier. Each target column starts at the last
+    transformation that computes it (or at the source qualifier if none does), passes
+    through every later transformation, and connects to the target.
+    """
+    chain = spec["chain"]
+    ports = [{port: expr for port, expr in t["fields"]} for t in chain]
+    links = []  # (from_instance, from_type, field, to_instance, to_type)
+
+    for src in spec["sources"]:
+        for col in _columns(src):
+            ports[0].setdefault(col, None)
+            links.append((src, "Source Definition", col, chain[0]["name"], chain[0]["type"]))
+
+    for tgt in spec["targets"]:
+        for col in TARGETS[tgt]:
+            start = max((i for i, p in enumerate(ports) if p.get(col)), default=0)
+            ports[start].setdefault(col, None)
+            for i in range(start + 1, len(chain)):
+                ports[i].setdefault(col, col)  # pass-through port
+                links.append((chain[i - 1]["name"], chain[i - 1]["type"], col,
+                              chain[i]["name"], chain[i]["type"]))
+            links.append((chain[-1]["name"], chain[-1]["type"], col, tgt, "Target Definition"))
+
+    return ports, list(dict.fromkeys(links))
+
+
 def _mapping(parent, spec):
     m = ET.SubElement(parent, "MAPPING", DESCRIPTION="", ISVALID="YES", NAME=spec["name"],
                       VERSIONNUMBER="1")
-    for t in spec["chain"]:
+    ports, links = _wire_ports(spec)
+    for t, tx_ports in zip(spec["chain"], ports):
         el = ET.SubElement(m, "TRANSFORMATION", DESCRIPTION="", NAME=t["name"], REUSABLE="NO",
                            TYPE=t["type"], VERSIONNUMBER="1")
         for grp_name, grp_expr in t["groups"]:
             ET.SubElement(el, "GROUP", DESCRIPTION="", NAME=grp_name, TYPE="OUTPUT",
                           EXPRESSION=grp_expr)
-        for port, expr in t["fields"]:
-            attrs = {"DATATYPE": "string", "NAME": port, "PORTTYPE": "OUTPUT"}
+        for port, expr in tx_ports.items():
+            attrs = {"DATATYPE": "string", "NAME": port}
             if expr:
                 attrs["EXPRESSION"] = expr
                 attrs["EXPRESSIONTYPE"] = "GENERAL"
+            attrs["PORTTYPE"] = "INPUT/OUTPUT" if expr in (None, port) else "OUTPUT"
             ET.SubElement(el, "TRANSFORMFIELD", **attrs)
         for attr_name, value in t["attrs"]:
             ET.SubElement(el, "TABLEATTRIBUTE", NAME=attr_name, VALUE=value)
@@ -429,20 +495,10 @@ def _mapping(parent, spec):
         ET.SubElement(m, "INSTANCE", NAME=t, TRANSFORMATION_NAME=t,
                       TRANSFORMATION_TYPE="Target Definition", TYPE="TARGET")
 
-    # Data flow: every source → first transformation → … → last transformation → targets
-    chain = [t["name"] for t in spec["chain"]]
-    for s in spec["sources"]:
-        ET.SubElement(m, "CONNECTOR", FROMFIELD="*", FROMINSTANCE=s,
-                      FROMINSTANCETYPE="Source Definition", TOFIELD="*", TOINSTANCE=chain[0],
-                      TOINSTANCETYPE=spec["chain"][0]["type"])
-    for a, b in zip(spec["chain"], spec["chain"][1:]):
-        ET.SubElement(m, "CONNECTOR", FROMFIELD="*", FROMINSTANCE=a["name"],
-                      FROMINSTANCETYPE=a["type"], TOFIELD="*", TOINSTANCE=b["name"],
-                      TOINSTANCETYPE=b["type"])
-    for t in spec["targets"]:
-        ET.SubElement(m, "CONNECTOR", FROMFIELD="*", FROMINSTANCE=chain[-1],
-                      FROMINSTANCETYPE=spec["chain"][-1]["type"], TOFIELD="*", TOINSTANCE=t,
-                      TOINSTANCETYPE="Target Definition")
+    for frm, frm_type, col, to, to_type in links:
+        ET.SubElement(m, "CONNECTOR", FROMFIELD=col, FROMINSTANCE=frm,
+                      FROMINSTANCETYPE=frm_type, TOFIELD=col, TOINSTANCE=to,
+                      TOINSTANCETYPE=to_type)
 
 
 def _session(parent, mapping_name):

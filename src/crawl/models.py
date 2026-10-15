@@ -59,6 +59,8 @@ class DataObject:
     target_tables: list[str] = field(default_factory=list)
     expressions: list[str] = field(default_factory=list)
     knowledge_modules: list[str] = field(default_factory=list)
+    # Target column → logic that computes it, e.g. {"FACT_SALES.NET_AMT": "GROSS - DISC"}
+    target_writes: dict[str, str] = field(default_factory=dict)
     # Execution stats (for dead code detection / triage)
     execution_count: int | None = None
     total_rows_processed: int | None = None
